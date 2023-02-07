@@ -1,0 +1,191 @@
+<html>
+
+<head>
+
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@4.9.3/dist/js/tabulator.js"></script>
+    <script type="text/javascript" src="https://cdn.bokeh.org/bokeh/release/bokeh-2.4.2.js"></script>
+    <script type="text/javascript" src="https://cdn.bokeh.org/bokeh/release/bokeh-widgets-2.4.2.min.js"></script>
+    <script type="text/javascript" src="https://cdn.bokeh.org/bokeh/release/bokeh-tables-2.4.2.min.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/@holoviz/panel@0.13.0/dist/panel.min.js"></script>
+    <script type="text/javascript">
+      Bokeh.set_log_level("info");
+    </script>
+
+    <link rel="stylesheet" href="https://pyscript.net/alpha/pyscript.css" />
+    <script defer src="https://pyscript.net/alpha/pyscript.js"></script>
+    <py-env>
+        - numpy
+        - pandas
+        - panel==0.13.1a2
+    </py-env>
+</head>
+
+<body>
+    <h1>Upload csv</h1>
+
+                   
+
+                <div>Pre file</div>  
+                <div id="fileinput1"></div>
+                <div id="upload1"></div>
+
+                <div>Post File</div>
+                <div id="fileinput2"></div>
+                <div id="upload2"></div>
+
+                <div id="table1"></div>
+                <div id="table2"></div>
+                <div id="download2"></div>
+            
+        
+    <py-script>
+import asyncio
+import panel as pn
+import pandas as pd
+from panel.io.pyodide import show
+from io import StringIO
+
+########################################################################################################################
+
+def validation(file_1, file_2):
+    dfFirst = file_1
+    dfSecond = file_2
+
+    temp = dfFirst.shape[1]
+    couter = 0
+
+    if dfFirst.shape[1] == dfSecond.shape[1]:
+        print("Suppperrrr... column length matched")
+# iff columns size will matched and values will same
+        for i in range(0, dfFirst.shape[1]): #first file column
+
+            for j in range(0, dfSecond.shape[1]):  # second file column
+                if (couter <= temp) and (dfFirst.columns[i] == dfSecond.columns[j]):   #iff column matched
+                    couter+=1
+                    if (couter == temp):
+                        print("no. of columns matched and column values are same")
+                        diffGen(file_1, file_2)
+                        return
+
+# iff columns size will matched and columns  values will different
+        print("no. of columns matched and values are different")
+        columnDiff(file_1, file_2)
+        return
+    else:
+        print("no. of columns not matching")
+        logger._INFO("no. of column is not Matching .....")
+        columnDiff(file_1, file_2)
+        return
+
+def diffGen(file_1, file_2):
+
+    dfFirst = file_1
+    dfSecond = file_2
+    print("Printing the datatypes")
+    print(dfFirst.dtypes)
+    print(dfSecond.dtypes)
+
+    dfFirst = dfFirst.astype(str)
+    dfSecond = dfSecond.astype(str)
+
+    merge = dfFirst.merge(dfSecond,indicator=True,how='outer')
+    diff = merge.loc[lambda x : x['_merge'] != 'both']
+
+    pd.options.mode.chained_assignment = None
+
+    diff.rename(columns = {'_merge':'src'}, inplace = True)
+    diff.replace("left_only", "Pre", inplace = True)
+    diff.replace("right_only", "Post", inplace = True)
+
+    if diff.empty:
+        print("No Diff found in two files")
+        return
+
+    #first_column = diff.pop('src')
+    #diff.insert(0, 'src', first_column)
+    
+    #print("At start of table2 value in diffGen")
+    table2.value = diff
+    #print("At end of table2 value in diffGen")
+    #return
+    #saveOutput(diff)
+
+def columnDiff(file_1, file_2, sheetName):
+
+    dfFirst = file_1
+    dfSecond = file_2
+
+    dfFirst.insert(0, "src", "Pre")
+    dfSecond.insert(0, "src", "Post")
+
+    dfAll = pd.concat([dfFirst, dfSecond], ignore_index = True, sort = False)
+    
+    table2.value = dfAll
+    #return
+    #saveOutput(dfAll)
+########################################################################################################################
+
+fileinput1 = pn.widgets.FileInput(accept='.csv')  #fileinput1
+uploadButton1 = pn.widgets.Button(name='Upload1', button_type = 'primary')
+
+fileinput2 = pn.widgets.FileInput(accept='.csv')  #fileinput2
+uploadButton2 = pn.widgets.Button(name='Upload2', button_type = 'primary')
+
+df = pd.DataFrame()
+
+table1 = pn.widgets.Tabulator(pagination='remote', page_size=10)
+
+table2 = pn.widgets.Tabulator(pagination='remote', page_size=10)
+
+
+def process_file1(event):
+    if fileinput1.value is not None:
+        print("Printing the table1 values at start")
+        table1.value = pd.read_csv(io.BytesIO(fileinput1.value))
+        document.getElementById('table1').style.display = 'block'
+        print("Printing the table1 values after")
+        print(table1.value)
+        
+        
+def process_file2(event):
+    if fileinput2.value is not None:
+        print("Printing the table1 values")
+        table2.value = pd.read_csv(io.BytesIO(fileinput2.value))
+        document.getElementById('table2').style.display = 'block'
+        #print("Printing the table2 values")
+        print(pd.DataFrame(table2.value))
+
+uploadButton1.on_click(process_file1)
+uploadButton2.on_click(process_file2)
+
+
+def get_csv2():
+    print("Printing global table1 values...")
+    print(table1.value)
+    validation(table1.value, table2.value)
+    return io.BytesIO(table2.value.to_csv(index=False).encode())
+
+file_download_csv2 = pn.widgets.FileDownload(filename="diff_result.csv", callback=get_csv2, button_type="primary")
+
+
+await show(fileinput1, 'fileinput1')
+await show(uploadButton1, 'upload1')
+await show(table1, 'table1')
+
+await show(fileinput2, 'fileinput2')
+await show(uploadButton2, 'upload2')
+await show(table2, 'table2')
+await show(file_download_csv2, 'download2')
+
+
+    </py-script>
+
+<py-repl id="my-repl" auto-generate="true"> </py-repl>
+
+
+</body>
+
+</html>
